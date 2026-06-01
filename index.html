@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>JRA App - Sistema Integral</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    /* VARIABLES PREMIUM */
+    :root {
+      --p-oscuro: #1b5e20; --p-medio: #2e7d32; --p-claro: #a5d6a7;
+      --s-oscuro: #ff8f00; --s-medio: #ffb300; --s-claro: #ffe082;
+      --fondo: #f1f8e9; --texto: #263238; --blanco: #ffffff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { background-color: var(--fondo); color: var(--texto); overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+
+    /* CABECERA CON LOGO */
+    header {
+      background: var(--blanco); padding: 15px;
+      display: flex; align-items: center; justify-content: center; gap: 15px;
+      border-bottom: 3px solid var(--p-medio); z-index: 100;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    header img { height: 45px; border-radius: 8px; }
+    header h1 { font-size: 1.3rem; color: var(--p-oscuro); font-weight: 800; letter-spacing: -0.5px; }
+
+    /* CONTENEDOR DE PESTAÑAS */
+    .app-scroller { flex: 1; overflow-y: auto; padding: 15px; padding-bottom: 90px; }
+    .vista { display: none; }
+    .vista.activa { display: block; animation: slideIn 0.3s cubic-bezier(0.1, 0.8, 0.2, 1); }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* TARJETAS */
+    .card {
+      background: var(--blanco); border-radius: 20px; padding: 20px; margin-bottom: 15px;
+      box-shadow: 0 5px 20px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.02);
+    }
+    .card h3 { color: var(--p-medio); margin-bottom: 10px; font-size: 1.2rem; display: flex; align-items: center; gap: 8px; }
+    .card p { font-size: 0.95rem; color: #555; line-height: 1.5; margin-bottom: 10px; }
+
+    /* PUNTOS Y LÍNEAS */
+    .puntos-caja { text-align: center; background: linear-gradient(135deg, var(--p-oscuro), var(--p-medio)); color: white; padding: 20px; border-radius: 20px; margin-bottom: 15px; box-shadow: 0 8px 20px rgba(27, 94, 32, 0.2); }
+    .puntos-num { font-size: 3.5rem; font-weight: 900; display: block; line-height: 1; margin-bottom: 5px; }
+
+    /* MAPA REAL */
+    #map { height: 300px; width: 100%; border-radius: 15px; border: 3px solid var(--p-claro); margin-top: 10px; background-color: #e0f2f1; z-index: 1; }
+
+    /* CHATBOT */
+    #chat-box { height: 280px; overflow-y: auto; background: #f8fcf8; padding: 15px; border-radius: 15px; border: 2px solid #e0e0e0; display: flex; flex-direction: column; gap: 10px; }
+    .msg { padding: 10px 15px; border-radius: 18px; font-size: 0.95rem; max-width: 85%; }
+    .msg.bot { background: var(--p-claro); color: var(--p-oscuro); align-self: flex-start; border-bottom-left-radius: 4px; font-weight: 600; }
+    .msg.user { background: var(--s-medio); color: white; align-self: flex-end; border-bottom-right-radius: 4px; font-weight: 600; }
+
+    /* JUEGO "ECO-ATRAPA" */
+    #game-container {
+      width: 100%; height: 320px; background: linear-gradient(to bottom, #87CEEB, #e0f7fa); border-radius: 15px;
+      position: relative; overflow: hidden; border: 4px solid var(--p-claro);
+      cursor: crosshair; touch-action: none;
+    }
+    #basket { position: absolute; bottom: 15px; left: 50%; width: 70px; height: 25px; background: var(--p-oscuro); border-radius: 8px; transform: translateX(-50%); box-shadow: inset 0 5px 5px rgba(255,255,255,0.2); }
+    .falling { position: absolute; font-size: 2rem; filter: drop-shadow(0 5px 5px rgba(0,0,0,0.2)); }
+
+    /* SELLOS / LOGROS */
+    .grid-sellos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .sello { background: #f5f5f5; padding: 20px 10px; border-radius: 18px; text-align: center; filter: grayscale(1); opacity: 0.4; transition: all 0.4s ease; border: 2px solid transparent; }
+    .sello.ganado { filter: grayscale(0); opacity: 1; background: #f1f8e9; border-color: var(--p-claro); transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+    .sello i { font-size: 3rem; display: block; margin-bottom: 8px; }
+    .sello p { font-weight: 800; color: #444; margin: 0; font-size: 0.9rem; }
+
+    /* MENÚ DE NAVEGACIÓN INFERIOR (5 BOTONES) */
+    .nav {
+      position: fixed; bottom: 0; width: 100%; background: var(--blanco);
+      display: flex; border-top-left-radius: 20px; border-top-right-radius: 20px; 
+      padding: 12px 5px 15px; z-index: 1000; box-shadow: 0 -5px 25px rgba(0,0,0,0.05);
+      justify-content: space-around;
+    }
+    .nav-btn { flex: 1; text-align: center; font-size: 0.75rem; color: #a0aab0; font-weight: 700; cursor: pointer; transition: 0.3s; }
+    .nav-btn.activa { color: var(--p-medio); transform: translateY(-3px); }
+    .nav-btn div { font-size: 1.5rem; margin-bottom: 3px; transition: 0.3s; }
+    .nav-btn.activa div { transform: scale(1.15); }
+
+    /* BOTONES GLOBALES */
+    .btn { background: linear-gradient(135deg, var(--s-medio), var(--s-oscuro)); color: white; border: none; padding: 15px; border-radius: 12px; width: 100%; font-weight: 800; font-size: 1.05rem; margin-top: 10px; box-shadow: 0 5px 15px rgba(255, 143, 0, 0.3); cursor: pointer; }
+    .btn:active { transform: scale(0.98); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_6uM4W_7u96u9_7u96u9_7u96u9_7u96u9_7u96u9_7u9" alt="Logo JRA">
+    <h1>JRA Servicios</h1>
+  </header>
+
+  <div class="app-scroller">
+    
+    <div id="v-empresa" class="vista activa">
+      <div style="text-align: center; padding: 10px 0 20px;">
+        <h2 style="color: var(--p-oscuro); font-size: 1.8rem; font-weight: 900;">¡Bienvenido a JRA!</h2>
+        <p style="color: #666;">Tu aliado en el cuidado del medio ambiente.</p>
+      </div>
+      <div class="card">
+        <h3>🌱 Nuestra Misión</h3>
+        <p>Aportar soluciones tecnológicas innovadoras para la gestión del aceite usado, protegiendo el agua y la salud de nuestra comunidad en Arequipa.</p>
+      </div>
+      <div class="card">
+        <h3>🚀 Nuestra Visión</h3>
+        <p>Ser la red líder de reciclaje inteligente en Perú, transformando residuos en vida y energía limpia para las futuras generaciones.</p>
+      </div>
+    </div>
+
+    <div id="v-recojo" class="vista">
+      <div class="puntos-caja">
+        <span class="puntos-num" id="puntos-global">0</span>
+        <p style="font-size: 1rem; font-weight: 600;">Eco-Puntos Acumulados</p>
+      </div>
+      <div class="card">
+        <h3>📍 Punto de Recojo</h3>
+        <p>Toca tu calle en el mapa de Arequipa para indicarnos dónde vive el camión JRA.</p>
+        <div id="map"></div>
+        <input type="date" id="fecha" style="width:100%; margin-top:15px; padding:15px; border-radius:12px; border:2px solid var(--p-claro); outline: none; font-weight: bold; font-family: inherit;">
+        <button class="btn" onclick="confirmarRecojo()">Agendar Recojo 🚛</button>
+      </div>
+    </div>
+
+    <div id="v-juego" class="vista">
+      <div class="card">
+        <h3>🎮 Eco-Atrapa</h3>
+        <p>Atrapa el aceite (💧) para ganar puntos en tu cuenta. ¡Esquiva la basura (🗑️)! <br><strong style="color:var(--p-oscuro); font-size: 1.1rem;">Puntos del Juego: <span id="game-score">0</span></strong></p>
+        <div id="game-container">
+          <div id="basket"></div>
+        </div>
+        <p style="font-size: 0.8rem; margin-top: 10px; text-align: center; font-weight: bold; color: #888;">Toca los lados del cuadro azul para mover el contenedor.</p>
+      </div>
+    </div>
+
+    <div id="v-logros" class="vista">
+      <div class="card">
+        <h3>🏆 Tus Sellos Ecológicos</h3>
+        <p>Juega o agenda recojos para desbloquearlos todos.</p>
+        <div class="grid-sellos">
+          <div id="s-1" class="sello"><i>🌱</i><p>Iniciador</p></div>
+          <div id="s-2" class="sello"><i>💧</i><p>Guardián</p></div>
+          <div id="s-3" class="sello"><i>🔥</i><p>Experto</p></div>
+          <div id="s-4" class="sello"><i>👑</i><p>Héroe JRA</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="v-chat" class="vista">
+      <div class="card">
+        <h3>🤖 Asistente Virtual JRA</h3>
+        <div id="chat-box">
+          <div class="msg bot">¡Hola! Soy tu asistente de JRA. ¿Tienes dudas sobre cómo colar y guardar el aceite usado?</div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:15px;">
+          <input type="text" id="chat-in" placeholder="Escribe tu mensaje..." style="flex:1; padding:12px; border-radius:12px; border:2px solid #ccc; outline:none; font-family:inherit;">
+          <button onclick="sendMsg()" style="background:var(--p-medio); color:white; border:none; padding:0 20px; border-radius:12px; font-weight:bold; cursor:pointer;">Enviar</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="nav">
+    <div class="nav-btn activa" onclick="nav('v-empresa', this)"><div>🏢</div>Empresa</div>
+    <div class="nav-btn" onclick="nav('v-recojo', this)"><div>📍</div>Recojo</div>
+    <div class="nav-btn" onclick="nav('v-juego', this)"><div>🎮</div>Juego</div>
+    <div class="nav-btn" onclick="nav('v-logros', this)"><div>🏆</div>Logros</div>
+    <div class="nav-btn" onclick="nav('v-chat', this)"><div>💬</div>Chat</div>
+  </div>
+
+  <script>
+    let globalPoints = 0;
+    let gameScore = 0;
+    let map;
+    let marker;
+
+    // --- INICIALIZAR MAPA AL CARGAR LA PÁGINA ---
+    window.onload = function() {
+      // Creamos el mapa pero no forzamos su renderizado aún
+      map = L.map('map').setView([-16.4090, -71.5375], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+
+      map.on('click', (e) => {
+        if(marker) { marker.setLatLng(e.latlng); }
+        else { marker = L.marker(e.latlng).addTo(map); }
+        marker.bindPopup("<b>¡Camión JRA, recojan aquí!</b>").openPopup();
+        addPoints(10); // Da puntos por ubicar
+      });
+
+      // Iniciar juego
+      spawn();
+    };
+
+    // --- SISTEMA DE NAVEGACIÓN A PRUEBA DE FALLOS ---
+    function nav(idVista, btnElemento) {
+      // 1. Ocultar todas las vistas y desactivar botones
+      document.querySelectorAll('.vista').forEach(v => v.classList.remove('activa'));
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('activa'));
+      
+      // 2. Activar la vista y botón seleccionados
+      document.getElementById(idVista).classList.add('activa');
+      btnElemento.classList.add('activa');
+
+      // 3. LA SOLUCIÓN MÁGICA DEL MAPA: Si entramos a Recojo, forzamos al mapa a despertar
+      if (idVista === 'v-recojo') {
+        setTimeout(() => {
+          if (map) { map.invalidateSize(); }
+        }, 200); // 200ms da tiempo exacto a que la pestaña termine de aparecer
+      }
+    }
+
+    // --- PUNTOS Y SELLOS ---
+    function addPoints(p) {
+      globalPoints += p;
+      document.getElementById('puntos-global').innerText = globalPoints;
+      checkSellos();
+    }
+
+    function checkSellos() {
+      if(globalPoints >= 20) document.getElementById('s-1').classList.add('ganado');
+      if(globalPoints >= 60) document.getElementById('s-2').classList.add('ganado');
+      if(globalPoints >= 120) document.getElementById('s-3').classList.add('ganado');
+      if(globalPoints >= 200) document.getElementById('s-4').classList.add('ganado');
+    }
+
+    // --- JUEGO INTERACTIVO "ECO-ATRAPA" ---
+    const gameCont = document.getElementById('game-container');
+    const basket = document.getElementById('basket');
+    let basketX = 50;
+
+    // Control táctil o mouse
+    gameCont.addEventListener('pointerdown', (e) => {
+      let rect = gameCont.getBoundingClientRect();
+      basketX = ((e.clientX - rect.left) / rect.width) * 100;
+      basket.style.left = basketX + '%';
+    });
+    gameCont.addEventListener('pointermove', (e) => {
+      // Si el usuario arrastra el dedo/mouse
+      if(e.buttons > 0) {
+        let rect = gameCont.getBoundingClientRect();
+        basketX = ((e.clientX - rect.left) / rect.width) * 100;
+        // Limitar bordes
+        if(basketX < 5) basketX = 5;
+        if(basketX > 95) basketX = 95;
+        basket.style.left = basketX + '%';
+      }
+    });
+
+    function spawn() {
+      // Solo generar objetos si estamos en la pestaña del juego
+      if(document.getElementById('v-juego').classList.contains('activa')) {
+        let obj = document.createElement('div');
+        obj.className = 'falling';
+        let isOil = Math.random() > 0.4; // 60% probabilidad de aceite
+        obj.innerHTML = isOil ? '💧' : '🗑️';
+        obj.style.left = (Math.random() * 80 + 10) + '%'; // Entre 10% y 90% ancho
+        obj.style.top = '-40px';
+        gameCont.appendChild(obj);
+
+        let top = -40;
+        let fall = setInterval(() => {
+          top += 4;
+          obj.style.top = top + 'px';
+          
+          // Lógica de colisión (cuando llega abajo)
+          if(top > 270 && top < 290) {
+            let objX = parseFloat(obj.style.left);
+            // Si la distancia horizontal es corta, lo atrapó
+            if(Math.abs(objX - basketX) < 15) {
+              if(isOil) { 
+                gameScore += 10; 
+                addPoints(2); // Sumar puntos globales a los sellos
+              } else { 
+                gameScore = Math.max(0, gameScore - 10); 
+              }
+              document.getElementById('game-score').innerText = gameScore;
+              clearInterval(fall);
+              obj.remove();
+            }
+          }
+          
+          // Si cae fuera de la pantalla
+          if(top > 320) {
+            clearInterval(fall);
+            obj.remove();
+          }
+        }, 30);
+      }
+      setTimeout(spawn, 1200); // Velocidad de generación
+    }
+
+    // --- LÓGICA DE CONFIRMAR RECOJO ---
+    function confirmarRecojo() {
+      const fecha = document.getElementById('fecha').value;
+      if (!marker) {
+        alert("❌ ¡Falta la dirección!\nToca primero una calle en el mapa de Arequipa.");
+        return;
+      }
+      if (!fecha) {
+        alert("📅 ¡Falta la fecha!\nSelecciona el día para el recojo.");
+        return;
+      }
+      alert(`✅ ¡Agendado con éxito!\nIremos a tu dirección en Arequipa el día ${fecha}. ¡Sigue acumulando puntos!`);
+    }
+
+    // --- CHATBOT ---
+    function sendMsg() {
+      let inp = document.getElementById('chat-in');
+      let box = document.getElementById('chat-box');
+      let texto = inp.value.trim();
+      
+      if(texto !== "") {
+        box.innerHTML += `<div class="msg user">${texto}</div>`;
+        inp.value = "";
+        box.scrollTop = box.scrollHeight;
+
+        setTimeout(() => {
+          box.innerHTML += `<div class="msg bot">Gracias por escribirnos. Nuestro equipo JRA procesará tu consulta y te responderá pronto. ¡Sigue reciclando! 🌍</div>`;
+          box.scrollTop = box.scrollHeight;
+        }, 1200);
+      }
+    }
+  </script>
+</body>
+</html>
